@@ -56,16 +56,8 @@ def load_safari(folder):
   return xtotal, ytotal
 
 def load_horizontal_line():
-  datasets = []
-  path = "data/horizontal_line/train"
-  for (_, _, filenames) in walk(path):
-    for f in filenames:
-      image = Image.open(os.path.join(path, f))
-      image = np.asarray(image)
-
-      empty = np.zeros_like(image, dtype=int)
-      empty[image] = 255
-      empty = np.expand_dims(empty, axis=2)
-      datasets.append(empty)
-
-  return np.array(datasets)
+  path = "data/horizontal_line/train/train.npz"
+  datasets = np.load(path)
+  key = datasets.files[0]
+  datasets = datasets[key]
+  return datasets
