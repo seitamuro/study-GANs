@@ -1,21 +1,19 @@
 import os
 
 #from __future__ import print_function, division
-from keras import optimizers
-from keras.engine.base_layer import disable_tracking
-
-from keras.layers import Input, Dense, Reshape, Flatten, Dropout
-from keras.layers import BatchNormalization, Activation, ZeroPadding2D
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
-from keras.models import Sequential, Model
-from keras.optimizers import Adam
+from tensorflow.keras.layers import Input, Dense, Reshape, Flatten, Dropout
+from tensorflow.keras.layers import BatchNormalization, Activation, ZeroPadding2D
+from tensorflow.keras.layers import LeakyReLU
+from tensorflow.keras.layers import UpSampling2D, Conv2D
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.optimizers import Adam
 
 import matplotlib.pyplot as plt
 
 import sys
 
 import numpy as np
+
 from tensorflow.python.keras.engine import input_layer
 from tensorflow.python.ops.gen_batch_ops import Batch, batch
 from tensorflow.python.util.nest import _INPUT_TREE_SMALLER_THAN_SHALLOW_TREE
@@ -134,7 +132,7 @@ class GAN():
 
         d_loss_real, d_acc_real = self.discriminator.train_on_batch(imgs, valid)
         d_loss_fake, d_acc_fake = self.discriminator.train_on_batch(gen_imgs, fake)
-        d_loss = 0.5 * (d_loss_real, d_loss_fake)
+        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
         return [d_loss, d_acc_real, d_acc_fake]
 
