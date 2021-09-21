@@ -3,197 +3,147 @@ import os
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras import activations
 from tensorflow.keras.layers import Input, Dense, Reshape, Flatten, Dropout, BatchNormalization, Activation, ZeroPadding2D
-from tensorflow.keras.layers import LeakyReLU, UpSampling2D, Conv2D, Conv2DTranspose
+from tensorflow.keras.layers import LeakyReLU, UpSampling2D, Conv2D, Conv2DTranspose, MaxPooling2D
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, SGD
 
 import matplotlib.pyplot as plt
 
 import sys
 
 import numpy as np
+from tensorflow.python.keras.engine import input_layer
 from tensorflow.python.keras.layers.convolutional import Conv
-from tensorflow.python.ops.gen_batch_ops import Batch
+from tensorflow.python.ops.gen_batch_ops import Batch, batch
+from tensorflow.python.util.nest import _INPUT_TREE_SMALLER_THAN_SHALLOW_TREE
 
 class DCGAN():
-    def __init__(self,
-        input_shape,
-        z_dim,
-        run_folder,
-        optimizer="adam",
-        generaotr_initial_dense_layer_size=(224, 224, 64),
-        generator_conv = "conv",
-        generator_conv_upsampling=[2, 2, 2],
-        generator_conv_strides=[2, 2, 2],
-        generator_conv_filters=[64, 32, 1],
-        generator_conv_kernels=[2, 2, 2,],
-        discriminator_conv_filters=[32, 64, 128, 256],
-        discriminator_conv_kernels=[3, 3, 3, 3],
-        discriminator_conv_strides=[2, 2, 2, 1],
-        dropout_rate=0.25,
-        normalize_momentum=0.5,
-        learning_rate=0.0001
-    ):
-        self.input_shape = input_shape
-        self.z_dim = z_dim
+    def __init__(self, run_folder):
         self.run_folder = run_folder
-        self.generator_conv = generator_conv
-        self.generaotr_initial_dense_layer_size = generaotr_initial_dense_layer_size
-        self.generator_conv_filters = generator_conv_filters
-        self.generator_conv_kernels = generator_conv_kernels
-        self.generator_conv_strides = generator_conv_strides
-        self.normalize_momentum = normalize_momentum
-        self.discriminator_conv_filters = discriminator_conv_filters
-        self.discriminator_conv_kernels = discriminator_conv_kernels
-        self.discriminator_conv_strides = discriminator_conv_strides
-        self.dropout_rate = dropout_rate
 
-        if optimizer == "adam":
-            self.optimizer = Adam(learning_rate, 0.5)
-        else:
-            raise Exception("optimizer %s is not defined." % optimizer)
+        self.build_generator()
+        self.build_discriminator()
+        self.build_adversarial()
 
-        self.discriminator = self.build_discriminator()
-        self.discriminator.compile(
+        self.generator.compile(
             loss="binary_crossentropy",
-            optimizer=optimizer,
+            optimizer=SGD(lr=0.0005, momentum=0.9, nesterov=True),
             metrics=["accuracy"]
         )
 
-        # Build the generator
-
-        self.generator = self.build_generator()
-
-        z = Input(shape=(self.z_dim,))
-        img = self.generator(z)
-
         self.discriminator.trainable = False
+        self.model.compile(
+            loss="binary_crossentropy",
+            optimizer=SGD(lr=0.0005, momentum=0.9, nesterov=True),
+            metrics=["accuracy"]
+        )
+        self.discriminator.trainable = True
 
-        valid = self.discriminator(img)
-
-        self.combined = Model(z, valid)
-        self.combined.compile(loss="binary_crossentropy", optimizer=optimizer)
+        self.discriminator.compile(
+            loss="binary_crossentropy",
+            optimizer=SGD(lr=0.0005, momentum=0.9, nesterov=True),
+            metrics=["accuracy"]
+        )
 
     def build_generator(self):
-
         model = Sequential()
-
-        input_layer = Input(shape=self.z_dim)
-
-        model.add(Dense(np.prod(self.generaotr_initial_dense_layer_size), activation="relu", input_dim=self.z_dim))
-        model.add(Reshape(self.generaotr_initial_dense_layer_size))
-        #model.add(UpSampling2D())
-
-        for i in range(len(self.generator_conv_filters)):
-            if self.generator_conv == "conv":
-                model.add(Conv2D(
-                    self.generator_conv_filters[i],
-                    kernel_size=self.generator_conv_kernels[i],
-                    strides=self.generator_conv_strides[i],
-                    padding="same")
-                )
-            elif self.generator_conv == "convT":
-                model.add(Conv2DTranspose(
-                    self.generator_conv_filters[i],
-                    kernel_size=self.generator_conv_kernels[i],
-                    strides=self.generator_conv_strides[i],
-                    padding="same")
-                )
-            model.add(BatchNormalization(momentum=self.normalize_momentum))
-            if i == len(self.generator_conv_filters) - 1:
-                model.add(Activation("tanh"))
-            else:
-                model.add(Activation("relu"))
-
-            #if model.layers[-1].output_shape[-2] != self.input_shape[-2]:
-                #model.add(UpSampling2D())
-            #if i == 0:
-                #model.add(ZeroPadding2D(padding=(3, 3)))
-
+        model.add(Input(100))
+        model.add(Dense(1024))
+        model.add(Activation("tanh"))
+        model.add(Dense(128*7*7))
+        model.add(BatchNormalization())
+        model.add(Activation("tanh"))
+        model.add(Reshape((7, 7, 128)))
+        model.add(UpSampling2D(size=(2, 2)))
+        model.add(Conv2D(64, (5, 5), padding="same"))
+        model.add(Activation("tanh"))
+        model.add(UpSampling2D(size=(2, 2)))
+        model.add(Conv2D(1, (5, 5), padding="same"))
+        model.add(Activation("tanh"))
         model.summary()
 
-        output_layer = model(input_layer)
-
-        return Model(input_layer, output_layer)
+        self.generator = model
 
     def build_discriminator(self):
-
         model = Sequential()
-
-        input_layer = Input(shape=self.input_shape)
-
-        model.add(Conv2D(
-            self.discriminator_conv_filters[0],
-            kernel_size=self.discriminator_conv_kernels[0],
-            strides=self.discriminator_conv_strides[0],
-            input_shape=self.input_shape,
-            padding="same")
-        )
-        model.add(BatchNormalization(momentum=self.normalize_momentum))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(self.dropout_rate))
-        model.add(ZeroPadding2D(padding=((0, 1), (0, 1))))
-        for i in range(1, len(self.discriminator_conv_filters)):
-            model.add(Conv2D(
-                self.discriminator_conv_filters[i],
-                kernel_size=self.discriminator_conv_kernels[i],
-                strides=self.discriminator_conv_strides[i],
-                padding="same")
-            )
-            model.add(BatchNormalization(momentum=self.normalize_momentum))
-            model.add(LeakyReLU(alpha=0.2))
-            model.add(Dropout(self.dropout_rate))
+        model.add(Conv2D(64, (5, 5), padding="same", input_shape=(28, 28, 1)))
+        model.add(Activation("tanh"))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Conv2D(128, (5, 5), padding="same"))
+        model.add(Activation("tanh"))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
         model.add(Flatten())
-        model.add(Dense(1, activation="sigmoid"))
-        
+        model.add(Dense(1024))
+        model.add(Dense(1))
+        model.add(Activation("sigmoid"))
+
         model.summary()
 
-        output_layer = model(input_layer)
+        self.discriminator = model
 
-        return Model(input_layer, output_layer)
+    def build_adversarial(self):
+        input_layer = Input(shape=(100,))
+        output_layer = self.discriminator(self.generator(input_layer))
+        model = Model(input_layer, output_layer)
 
-    def train(self, epochs, batch_size=128, save_interval=50):
+        model.summary()
+
+        self.model = model
+
+    def train(self, epochs=101, batch_size=128, print_interval=20):
         (x_train, _), (_, _) = mnist.load_data()
-
-        x_train = x_train / 127.5 - 1.
         x_train = np.expand_dims(x_train, axis=3)
-
-        valid = np.ones((batch_size, 1))
-        fake = np.zeros((batch_size, 1))
+        x_train = (x_train.astype(np.float32) - 127.5) / 127.5
 
         for epoch in range(epochs):
-            # train discriminator
-            idx = np.random.randint(0, x_train.shape[0], batch_size)
-            imgs = x_train[idx]
+            g_loss, g_acc = self.train_generator(batch_size)
+            d_loss, d_acc = self.train_discriminator(x_train, batch_size)
 
-            noise = np.random.normal(0, 1, (batch_size, self.z_dim))
-            gen_imgs = self.generator.predict(noise)
+            print("epoch: %d d_loss: %.3f d_acc: %.3f g_loss: %.3f g_acc: %.3f" % (epoch, d_loss, d_acc, g_loss, g_acc))
 
-            d_loss_real = self.discriminator.train_on_batch(imgs, valid)
-            d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
-            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            if epoch % print_interval == 0:
+                self.save_images(epoch)
 
-            # train generator
-            g_loss = self.combined.train_on_batch(noise, valid)
 
-            print("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
+    def train_generator(self, batch_size):
+        noise = np.random.normal(0, 1, (batch_size, 100))
+        labels = np.ones((batch_size, 1))
+        self.discriminator.trainable = False
+        g_loss, g_acc = self.model.train_on_batch(noise, labels)
+        self.discriminator.trainable = True
 
-            if epoch % save_interval == 0:
-                self.save_imgs(epoch)
+        return g_loss, g_acc
 
-    def save_imgs(self, epoch):
-        r, c = 5, 5
-        noise = np.random.normal(0, 1, (r*c, self.z_dim))
+    def train_discriminator(self, x_train, batch_size):
+        idx = np.random.randint(0, len(x_train), int(batch_size/2))
+
+        true_image = x_train[idx]
+        true_label = [1] * int(batch_size / 2)
+
+        noise = np.random.normal(0, 1, (batch_size // 2, 100))
+        gen_image = self.generator.predict(noise)
+        gen_label = [0] * int(batch_size / 2)
+
+        images = np.concatenate((true_image, gen_image))
+        labels = np.concatenate((true_label, gen_label))
+        d_loss, d_acc = self.discriminator.train_on_batch(images, labels)
+
+        return d_loss, d_acc
+
+    def save_images(self, epoch, r=5, c=5):
+        noise = np.random.normal(0, 1, (r*c, 100))
         gen_imgs = self.generator.predict(noise)
 
-        gen_imgs = 0.5 * gen_imgs + 0.5
-
-        fig, axs = plt.subplots(r, c)
+        fig, axs = plt.subplots(r, c, figsize=(15, 15))
         cnt = 0
         for i in range(r):
             for j in range(c):
                 axs[i, j].imshow(gen_imgs[cnt, :, :, 0], cmap="gray")
                 axs[i, j].axis("off")
                 cnt += 1
-        fig.savefig(os.path.join(self.run_folder, "images/mnist_%d.png" % epoch))
+        fig.savefig(os.path.join(self.run_folder, "images/images_%d.png" % epoch))
         plt.close()
+
+if __name__ == "__main__":
+    dcgan = DCGAN("run/dcgan/0002_mnist")
+    dcgan.train(epochs=60001, print_interval=100)
