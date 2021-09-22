@@ -67,10 +67,12 @@ class DCGAN():
     def build_discriminator(self):
         model = Sequential()
         model.add(Conv2D(64, (5, 5), padding="same", input_shape=(28, 28, 1)))
-        model.add(Activation("tanh"))
+        #model.add(Activation("tanh"))
+        model.add(LeakyReLU())
         model.add(MaxPooling2D(pool_size=(2, 2)))
         model.add(Conv2D(128, (5, 5), padding="same"))
-        model.add(Activation("tanh"))
+        #model.add(Activation("tanh"))
+        model.add(LeakyReLU())
         model.add(MaxPooling2D(pool_size=(2, 2)))
         model.add(Flatten())
         model.add(Dense(1024))
@@ -93,7 +95,7 @@ class DCGAN():
     def train(self, epochs=101, batch_size=128, print_interval=20):
         (x_train, _), (_, _) = mnist.load_data()
         x_train = np.expand_dims(x_train, axis=3)
-        x_train = (x_train.astype(np.float32) - 127.5) / 127.5
+        x_train = x_train.astype(np.float32) / 127.5 - 1
 
         for epoch in range(epochs):
             g_loss, g_acc = self.train_generator(batch_size)
