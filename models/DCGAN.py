@@ -49,16 +49,22 @@ class DCGAN():
         model = Sequential()
         model.add(Input(100))
         model.add(Dense(1024))
-        model.add(Activation("tanh"))
-        model.add(Dense(128*7*7))
         model.add(BatchNormalization())
-        model.add(Activation("tanh"))
-        model.add(Reshape((7, 7, 128)))
+        model.add(Activation("relu"))
+        model.add(Dense(256*7*7))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
+        model.add(Reshape((7, 7, 256)))
         model.add(UpSampling2D(size=(2, 2)))
+        model.add(Conv2D(128, (5, 5), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
         model.add(Conv2D(64, (5, 5), padding="same"))
-        model.add(Activation("tanh"))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
         model.add(UpSampling2D(size=(2, 2)))
         model.add(Conv2D(1, (5, 5), padding="same"))
+        model.add(BatchNormalization())
         model.add(Activation("tanh"))
         model.summary()
 
@@ -67,16 +73,18 @@ class DCGAN():
     def build_discriminator(self):
         model = Sequential()
         model.add(Conv2D(64, (5, 5), padding="same", input_shape=(28, 28, 1)))
-        #model.add(Activation("tanh"))
+        model.add(BatchNormalization())
         model.add(LeakyReLU())
-        model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Conv2D(128, (5, 5), padding="same"))
-        #model.add(Activation("tanh"))
+        model.add(Conv2D(128, (5, 5), strides=2, padding="same"))
+        model.add(BatchNormalization())
         model.add(LeakyReLU())
-        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Conv2D(256 , (5, 5), strides=2, padding="same"))
+        model.add(BatchNormalization())
         model.add(Flatten())
         model.add(Dense(1024))
+        model.add(BatchNormalization())
         model.add(Dense(1))
+        model.add(BatchNormalization())
         model.add(Activation("sigmoid"))
 
         model.summary()
@@ -92,10 +100,10 @@ class DCGAN():
 
         self.model = model
 
-    def train(self, epochs=101, batch_size=128, print_interval=20):
-        (x_train, _), (_, _) = mnist.load_data()
-        x_train = np.expand_dims(x_train, axis=3)
-        x_train = x_train.astype(np.float32) / 127.5 - 1
+    def train(self, x_train, epochs=101, batch_size=128, print_interval=20):
+        #(x_train, _), (_, _) = mnist.load_data()
+        #x_train = np.expand_dims(x_train, axis=3)
+        #x_train = x_train.astype(np.float32) / 127.5 - 1
 
         for epoch in range(epochs):
             g_loss, g_acc = self.train_generator(batch_size)
